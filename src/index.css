@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-serif: 'Playfair Display', Georgia, serif;
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-body: 'Manrope', sans-serif;
+    --font-script: 'Great Vibes', cursive;
+
+    /* Theme colors - Light default values */
+    --color-gold: #D4AF37;
+    --color-coral: #E11D48;
+    --color-charcoal: #1A1A1A;
+  }
+
+  .font-serif-luxury {
+    font-family: var(--font-serif);
+  }
+
+  .font-body-luxury {
+    font-family: var(--font-body);
+  }
+
+  .font-script-luxury {
+    font-family: var(--font-script);
+  }
+}
+
+/* Custom Glassmorphism Styles */
+.glass-panel-dark {
+  background: rgba(19, 19, 20, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(212, 175, 55, 0.2);
+}
+
+.glass-panel-light {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  box-shadow: 0 10px 30px rgba(212, 175, 55, 0.08);
+}
+
+.gold-glow {
+  box-shadow: 0 0 25px rgba(212, 175, 55, 0.35);
+}
+
+.gold-glow-subtle {
+  box-shadow: 0 4px 20px rgba(212, 175, 55, 0.15);
+}
