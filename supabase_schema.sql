@@ -117,3 +117,15 @@ VALUES
     215
 )
 ON CONFLICT (id) DO NOTHING;
+
+
+-- =========================================================
+-- 7. Supabase Storage Bucket Setup (argon-assets)
+-- Run this in Supabase SQL Editor if you wish to host files directly
+-- =========================================================
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('argon-assets', 'argon-assets', true)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "Public Read Assets" ON storage.objects FOR SELECT USING (bucket_id = 'argon-assets');
+CREATE POLICY "Public Upload Assets" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'argon-assets');

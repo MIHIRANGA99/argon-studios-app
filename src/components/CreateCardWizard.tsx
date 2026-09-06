@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import type { ARCard, CardType, ParticleEffect } from '../types';
 import { StorageService } from '../utils/storage';
+import { MediaDropzone } from './MediaDropzone';
 
 interface CreateCardWizardProps {
   theme: 'dark' | 'light';
@@ -438,33 +439,25 @@ export const CreateCardWizard: React.FC<CreateCardWizardProps> = ({
               3. AR Target &amp; Media Layers
             </h3>
 
-            <div>
-              <label className="block text-xs text-neutral-400 mb-1">Printed Card Artwork (Target)</label>
-              <div className="relative h-44 w-full rounded-xl overflow-hidden border border-neutral-700/80 bg-neutral-950/80 group">
-                <img src={targetImageUrl} alt="Target" className="w-full h-full object-cover" />
-                <div className="absolute top-2 right-2 px-2 py-0.5 rounded bg-black/70 text-[10px] text-emerald-400 font-semibold border border-emerald-500/30">
-                  Target Compiled (1,480 keypoints)
-                </div>
-              </div>
-              <input
-                type="text"
-                value={targetImageUrl}
-                onChange={(e) => setTargetImageUrl(e.target.value)}
-                className="mt-2 w-full text-xs px-2.5 py-1.5 rounded bg-neutral-900/60 border border-neutral-800 text-neutral-300"
-                placeholder="Image URL"
-              />
-            </div>
+            <MediaDropzone
+              type="image"
+              label="1. Printed Card Artwork (AR Target)"
+              accept="image/*"
+              value={targetImageUrl}
+              onChange={setTargetImageUrl}
+              theme={theme}
+              maxSizeMB={30}
+            />
 
-            <div>
-              <label className="block text-xs text-neutral-400 mb-1">AR Video Texture Overlay (MP4)</label>
-              <input
-                type="text"
-                value={videoUrl}
-                onChange={(e) => setVideoUrl(e.target.value)}
-                className="w-full text-xs px-2.5 py-1.5 rounded bg-neutral-900/60 border border-neutral-800 text-neutral-300"
-                placeholder="Video MP4 URL"
-              />
-            </div>
+            <MediaDropzone
+              type="video"
+              label="2. Augmented Video Texture Overlay"
+              accept="video/*"
+              value={videoUrl}
+              onChange={setVideoUrl}
+              theme={theme}
+              maxSizeMB={50}
+            />
 
             <div>
               <label className="block text-xs text-neutral-400 mb-2">Ambient 3D Particle Effect</label>
