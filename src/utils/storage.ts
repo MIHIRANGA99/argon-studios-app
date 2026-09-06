@@ -1,4 +1,5 @@
 import type { ARCard, RSVPResponse } from '../types';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const STORAGE_KEY_CARDS = 'argon_studios_cards';
 const STORAGE_KEY_RSVPS = 'argon_studios_rsvps';
@@ -64,11 +65,60 @@ export const INITIAL_CARDS: ARCard[] = [
   }
 ];
 
+function mapDbToCard(row: any): ARCard {
+  const custom = row.custom_data || {};
+  const base = {
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    createdAt: row.created_at || new Date().toISOString(),
+    targetImageUrl: row.target_image_url,
+    videoUrl: row.video_url || undefined,
+    audioUrl: row.audio_url || undefined,
+    effect: row.effect,
+    scansCount: row.scans_count || 0,
+    ...custom
+  };
+  return base as ARCard;
+}
+
+function mapCardToDb(card: ARCard) {
+  const { id, type, title, createdAt, targetImageUrl, videoUrl, audioUrl, effect, scansCount, ...customData } = card as any;
+  return {
+    id,
+    title,
+    type,
+    target_image_url: targetImageUrl,
+    video_url: videoUrl || null,
+    audio_url: audioUrl || null,
+    effect: effect || 'golden_sparkles',
+    scans_count: scansCount || 0,
+    created_at: createdAt || new Date().toISOString(),
+    custom_data: customData
+  };
+}
+
+function mapDbToRSVP(row: any): RSVPResponse {
+  return {
+    id: row.id,
+    cardId: row.card_id,
+    guestName: row.guest_name,
+    attending: row.attending,
+    plusOne: row.plus_one,
+    dietary: row.dietary || '',
+    submittedAt: row.submitted_at || new Date().toISOString()
+  };
+}
+
 export const StorageService = {
+  isCloudConnected(): boolean {
+    return isSupabaseConfigured();
+  },
+
   getCards(): ARCard[] {
     const data = localStorage.getItem(STORAGE_KEY_CARDS);
     if (!data) {
-      this.saveCards(INITIAL_CARDS);
+      this.saveCardsLocal(INITIAL_CARDS);
       return INITIAL_CARDS;
     }
     try {
@@ -78,30 +128,117 @@ export const StorageService = {
     }
   },
 
-  saveCards(cards: ARCard[]) {
+  saveCardsLocal(cards: ARCard[]) {
     localStorage.setItem(STORAGE_KEY_CARDS, JSON.stringify(cards));
   },
 
-  addCard(card: ARCard) {
+  async fetchCardsAsync(): Promise<ARCard[]> {
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('argon_cards')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          const cards = data.map(mapDbToCard);
+          this.saveCardsLocal(cards);
+          return cards;
+        }
+      } catch (err) {
+        console.warn('Supabase fetch cards failed, falling back to local storage:', err);
+      }
+    }
+    return this.getCards();
+  },
+
+  async addCard(card: ARCard): Promise<void> {
     const cards = this.getCards();
     cards.unshift(card);
-    this.saveCards(cards);
+    this.saveCardsLocal(cards);
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const dbRow = mapCardToDb(card);
+        await supabase.from('argon_cards').upsert(dbRow);
+      } catch (err) {
+        console.error('Failed to sync new card to Supabase:', err);
+      }
+    }
+  },
+
+  async deleteCard(id: string): Promise<void> {
+    const cards = this.getCards().filter((c) => c.id !== id);
+    this.saveCardsLocal(cards);
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from('argon_cards').delete().eq('id', id);
+      } catch (err) {
+        console.error('Failed to delete card from Supabase:', err);
+      }
+    }
   },
 
   getCardById(id: string): ARCard | undefined {
     return this.getCards().find((c) => c.id === id);
   },
 
-  recordScan(cardId: string) {
+  async fetchCardByIdAsync(id: string): Promise<ARCard | undefined> {
+    const local = this.getCardById(id);
+    if (local) return local;
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('argon_cards')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (!error && data) {
+          const fetchedCard = mapDbToCard(data);
+          const all = this.getCards();
+          all.unshift(fetchedCard);
+          this.saveCardsLocal(all);
+          return fetchedCard;
+        }
+      } catch (err) {
+        console.warn('Failed to fetch card from Supabase:', err);
+      }
+    }
+    return undefined;
+  },
+
+  async recordScan(cardId: string) {
     const cards = this.getCards();
     const target = cards.find((c) => c.id === cardId);
     if (target) {
       target.scansCount += 1;
-      this.saveCards(cards);
+      this.saveCardsLocal(cards);
+    }
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        // Record scan event
+        await supabase.from('argon_scans').insert({
+          card_id: cardId,
+          user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown'
+        });
+
+        if (target) {
+          await supabase
+            .from('argon_cards')
+            .update({ scans_count: target.scansCount })
+            .eq('id', cardId);
+        }
+      } catch (err) {
+        console.warn('Could not record scan in Supabase:', err);
+      }
     }
   },
 
-  recordRSVP(rsvp: RSVPResponse) {
+  async recordRSVP(rsvp: RSVPResponse) {
     const existing: RSVPResponse[] = JSON.parse(localStorage.getItem(STORAGE_KEY_RSVPS) || '[]');
     existing.unshift(rsvp);
     localStorage.setItem(STORAGE_KEY_RSVPS, JSON.stringify(existing));
@@ -110,7 +247,36 @@ export const StorageService = {
     const card = cards.find((c) => c.id === rsvp.cardId);
     if (card && (card.type === 'wedding' || card.type === 'birthday')) {
       card.rsvpsCount += 1;
-      this.saveCards(cards);
+      this.saveCardsLocal(cards);
+    }
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from('argon_rsvps').insert({
+          id: rsvp.id,
+          card_id: rsvp.cardId,
+          guest_name: rsvp.guestName,
+          attending: rsvp.attending,
+          plus_one: rsvp.plusOne,
+          dietary: rsvp.dietary || null,
+          submitted_at: rsvp.submittedAt
+        });
+
+        if (card && (card.type === 'wedding' || card.type === 'birthday')) {
+          const custom = (card as any);
+          await supabase
+            .from('argon_cards')
+            .update({
+              custom_data: {
+                ...custom,
+                rsvpsCount: card.rsvpsCount
+              }
+            })
+            .eq('id', card.id);
+        }
+      } catch (err) {
+        console.error('Failed to sync RSVP to Supabase:', err);
+      }
     }
   },
 
@@ -119,7 +285,7 @@ export const StorageService = {
     const card = cards.find((c) => c.id === cardId);
     if (card && card.type === 'business') {
       card.vCardsSavedCount += 1;
-      this.saveCards(cards);
+      this.saveCardsLocal(cards);
     }
   },
 
@@ -129,6 +295,25 @@ export const StorageService = {
     } catch {
       return [];
     }
+  },
+
+  async fetchRSVPsAsync(cardId?: string): Promise<RSVPResponse[]> {
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        let query = supabase.from('argon_rsvps').select('*').order('submitted_at', { ascending: false });
+        if (cardId) {
+          query = query.eq('card_id', cardId);
+        }
+        const { data, error } = await query;
+        if (!error && data) {
+          return data.map(mapDbToRSVP);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch RSVPs from Supabase:', err);
+      }
+    }
+    const local = this.getRSVPs();
+    return cardId ? local.filter((r) => r.cardId === cardId) : local;
   },
 
   getTheme(): 'dark' | 'light' {

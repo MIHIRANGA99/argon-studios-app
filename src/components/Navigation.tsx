@@ -1,11 +1,13 @@
-import React from 'react';
-import { Plus, Sun, Moon, Bell } from 'lucide-react';
+import React, { useState } from 'react';
+import { Plus, Sun, Moon, Database, Users, CheckCircle2, HelpCircle } from 'lucide-react';
+import { StorageService } from '../utils/storage';
 
 interface NavigationProps {
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
   activeTab: 'cards' | 'new';
   onTabChange: (tab: 'cards' | 'new') => void;
+  onOpenRSVPInbox: () => void;
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
@@ -13,8 +15,11 @@ export const Navigation: React.FC<NavigationProps> = ({
   onToggleTheme,
   activeTab,
   onTabChange,
+  onOpenRSVPInbox
 }) => {
+  const [showConfigHelp, setShowConfigHelp] = useState(false);
   const isDark = theme === 'dark';
+  const isCloud = StorageService.isCloudConnected();
 
   return (
     <header
@@ -46,7 +51,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         </div>
 
         {/* Navigation Tabs */}
-        <nav className="hidden md:flex items-center gap-8 text-sm font-medium tracking-wide">
+        <nav className="hidden md:flex items-center gap-6 text-sm font-medium tracking-wide">
           <button
             onClick={() => onTabChange('cards')}
             className={`transition-all py-1.5 px-1 relative ${
@@ -62,9 +67,71 @@ export const Navigation: React.FC<NavigationProps> = ({
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#D4AF37] rounded-full gold-glow"></span>
             )}
           </button>
-          <span className="text-xs text-neutral-400 cursor-not-allowed opacity-60">Analytics</span>
-          <span className="text-xs text-neutral-400 cursor-not-allowed opacity-60">Templates</span>
-          <span className="text-xs text-neutral-400 cursor-not-allowed opacity-60">Clients</span>
+
+          <button
+            onClick={onOpenRSVPInbox}
+            className={`flex items-center gap-1.5 py-1.5 px-1 transition-all ${
+              isDark ? 'text-neutral-300 hover:text-[#D4AF37]' : 'text-neutral-700 hover:text-[#D4AF37]'
+            }`}
+          >
+            <Users className="w-4 h-4 text-[#D4AF37]" />
+            <span>RSVP Inbox</span>
+          </button>
+
+          {/* Cloud Status Badge */}
+          <div className="relative">
+            <button
+              onClick={() => setShowConfigHelp(!showConfigHelp)}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold border transition-all ${
+                isCloud
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  : 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:border-amber-400'
+              }`}
+            >
+              {isCloud ? (
+                <>
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                  <span>Cloud Synced</span>
+                </>
+              ) : (
+                <>
+                  <Database className="w-3 h-3 text-amber-400" />
+                  <span>Local Mode</span>
+                  <HelpCircle className="w-3 h-3 opacity-60 ml-0.5" />
+                </>
+              )}
+            </button>
+
+            {/* Cloud Setup Tooltip Modal */}
+            {showConfigHelp && (
+              <div className={`absolute top-10 left-0 w-80 p-4 rounded-xl shadow-2xl border text-xs z-50 animate-in fade-in slide-in-from-top-2 ${
+                isDark ? 'bg-[#18181C] border-neutral-700 text-neutral-200' : 'bg-white border-neutral-200 text-neutral-800'
+              }`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-sm text-[#D4AF37]">
+                    {isCloud ? 'Supabase Connected' : 'Connect Free Cloud DB'}
+                  </span>
+                  <button onClick={() => setShowConfigHelp(false)} className="text-neutral-400 hover:text-white">✕</button>
+                </div>
+                {isCloud ? (
+                  <p className="text-neutral-400 leading-relaxed">
+                    ARGON Studios is securely connected to Supabase. Cards created on this desktop will sync live to guest phones scanning QR codes.
+                  </p>
+                ) : (
+                  <div className="space-y-2 text-neutral-300">
+                    <p>
+                      Cards are currently saved in your local browser. To sync live across mobile phones:
+                    </p>
+                    <ol className="list-decimal pl-4 space-y-1 text-neutral-400">
+                      <li>Create a free project at <strong className="text-white">supabase.com</strong></li>
+                      <li>Run <strong className="text-white">supabase_schema.sql</strong> in the SQL editor</li>
+                      <li>Add your Project URL and anon key to <strong className="text-white">.env</strong></li>
+                    </ol>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </nav>
 
         {/* Action Controls */}
@@ -80,11 +147,6 @@ export const Navigation: React.FC<NavigationProps> = ({
           >
             {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
-
-          <div className="hidden sm:flex relative p-2.5 rounded-full border border-neutral-700/50 text-neutral-400">
-            <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#E11D48] rounded-full"></span>
-          </div>
 
           <button
             onClick={() => onTabChange('new')}

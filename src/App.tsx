@@ -4,29 +4,42 @@ import { MetricRibbon } from './components/MetricRibbon';
 import { CardGrid } from './components/CardGrid';
 import { CreateCardWizard } from './components/CreateCardWizard';
 import { QRCodeModal } from './components/QRCodeModal';
+import { RSVPModal } from './components/RSVPModal';
 import { WebARViewer } from './components/ar/WebARViewer';
 import { StorageService } from './utils/storage';
 import type { ARCard } from './types';
 
-export function App() {
+export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [cards, setCards] = useState<ARCard[]>([]);
   const [activeTab, setActiveTab] = useState<'cards' | 'new'>('cards');
   const [selectedQRCard, setSelectedQRCard] = useState<ARCard | null>(null);
-  const [activeARCardId, setActiveARCardId] = useState<string | null>(null);
+  const [activeARCard, setActiveARCard] = useState<ARCard | null>(null);
+  const [isRSVPModalOpen, setIsRSVPModalOpen] = useState(false);
 
   useEffect(() => {
     const savedTheme = StorageService.getTheme();
     setTheme(savedTheme);
     document.documentElement.className = savedTheme;
 
-    const loadedCards = StorageService.getCards();
-    setCards(loadedCards);
+    // 1. Instant local render
+    const localCards = StorageService.getCards();
+    setCards(localCards);
 
+    // 2. Background cloud fetch
+    StorageService.fetchCardsAsync().then((fetched) => {
+      setCards(fetched);
+    });
+
+    // 3. Direct URL viewer check (?view=card-id)
     const urlParams = new URLSearchParams(window.location.search);
     const viewParam = urlParams.get('view');
     if (viewParam) {
-      setActiveARCardId(viewParam);
+      StorageService.fetchCardByIdAsync(viewParam).then((foundCard) => {
+        if (foundCard) {
+          setActiveARCard(foundCard);
+        }
+      });
     }
   }, []);
 
@@ -37,11 +50,10 @@ export function App() {
     document.documentElement.className = nextTheme;
   };
 
-  const refreshCards = () => {
-    setCards(StorageService.getCards());
+  const refreshCards = async () => {
+    const updated = await StorageService.fetchCardsAsync();
+    setCards(updated);
   };
-
-  const activeARCard = activeARCardId ? StorageService.getCardById(activeARCardId) : null;
 
   return (
     <div
@@ -53,7 +65,7 @@ export function App() {
         <WebARViewer
           card={activeARCard}
           onClose={() => {
-            setActiveARCardId(null);
+            setActiveARCard(null);
             window.history.replaceState({}, '', window.location.pathname);
             refreshCards();
           }}
@@ -65,6 +77,7 @@ export function App() {
             onToggleTheme={handleToggleTheme}
             activeTab={activeTab}
             onTabChange={setActiveTab}
+            onOpenRSVPInbox={() => setIsRSVPModalOpen(true)}
           />
 
           <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -75,15 +88,18 @@ export function App() {
                   cards={cards}
                   theme={theme}
                   onSelectCard={setSelectedQRCard}
-                  onPreviewAR={(id) => setActiveARCardId(id)}
+                  onPreviewAR={(id) => {
+                    const target = cards.find((c) => c.id === id);
+                    if (target) setActiveARCard(target);
+                  }}
                 />
               </>
             ) : (
               <CreateCardWizard
                 theme={theme}
                 onCancel={() => setActiveTab('cards')}
-                onCreated={(newCardId) => {
-                  refreshCards();
+                onCreated={async (newCardId) => {
+                  await refreshCards();
                   setActiveTab('cards');
                   const created = StorageService.getCardById(newCardId);
                   if (created) setSelectedQRCard(created);
@@ -121,9 +137,15 @@ export function App() {
               theme={theme}
             />
           )}
+
+          <RSVPModal
+            cards={cards}
+            isOpen={isRSVPModalOpen}
+            onClose={() => setIsRSVPModalOpen(false)}
+            theme={theme}
+          />
         </>
       )}
     </div>
   );
 }
-export default App;
