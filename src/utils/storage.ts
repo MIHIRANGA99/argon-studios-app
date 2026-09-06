@@ -152,6 +152,24 @@ export const StorageService = {
     return this.getCards();
   },
 
+  async updateCard(card: ARCard): Promise<void> {
+    const cards = this.getCards();
+    const index = cards.findIndex((c) => c.id === card.id);
+    if (index !== -1) {
+      cards[index] = card;
+      this.saveCardsLocal(cards);
+    }
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const dbRow = mapCardToDb(card);
+        await supabase.from('argon_cards').upsert(dbRow);
+      } catch (err) {
+        console.error('Failed to sync updated card to Supabase:', err);
+      }
+    }
+  },
+
   async addCard(card: ARCard): Promise<void> {
     const cards = this.getCards();
     cards.unshift(card);

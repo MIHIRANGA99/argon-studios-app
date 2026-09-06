@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { QrCode, Eye, Calendar, Sparkles, Mail, MapPin } from 'lucide-react';
+import { QrCode, Eye, Calendar, Sparkles, Mail, MapPin, Edit3 } from 'lucide-react';
 import type { ARCard, CardType } from '../types';
 
 interface CardGridProps {
@@ -7,6 +7,7 @@ interface CardGridProps {
   theme: 'dark' | 'light';
   onSelectCard: (card: ARCard) => void;
   onPreviewAR: (cardId: string) => void;
+  onEditCard: (card: ARCard) => void;
 }
 
 export const CardGrid: React.FC<CardGridProps> = ({
@@ -14,6 +15,7 @@ export const CardGrid: React.FC<CardGridProps> = ({
   theme,
   onSelectCard,
   onPreviewAR,
+  onEditCard,
 }) => {
   const [filter, setFilter] = useState<'all' | CardType>('all');
   const isDark = theme === 'dark';
@@ -168,21 +170,32 @@ export const CardGrid: React.FC<CardGridProps> = ({
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="grid grid-cols-3 gap-2 pt-1">
                   <button
                     onClick={() => onPreviewAR(card.id)}
-                    className="flex items-center justify-center gap-1.5 py-2 rounded-lg bg-[#D4AF37] hover:bg-[#E5C158] text-neutral-950 font-semibold text-xs transition-colors shadow-sm"
+                    className="flex items-center justify-center gap-1 py-2 rounded-lg bg-[#D4AF37] hover:bg-[#E5C158] text-neutral-950 font-semibold text-xs transition-colors shadow-sm"
+                    title="Launch Spatial WebAR"
                   >
                     <Eye className="w-3.5 h-3.5" />
-                    <span>Launch WebAR</span>
+                    <span>View</span>
                   </button>
 
                   <button
                     onClick={() => onSelectCard(card)}
-                    className="flex items-center justify-center gap-1.5 py-2 rounded-lg border border-[#D4AF37]/40 hover:bg-[#D4AF37]/10 text-[#D4AF37] font-semibold text-xs transition-colors"
+                    className="flex items-center justify-center gap-1 py-2 rounded-lg border border-[#D4AF37]/40 hover:bg-[#D4AF37]/10 text-[#D4AF37] font-semibold text-xs transition-colors"
+                    title="Printable QR Code"
                   >
                     <QrCode className="w-3.5 h-3.5" />
-                    <span>Get QR Code</span>
+                    <span>QR</span>
+                  </button>
+
+                  <button
+                    onClick={() => onEditCard(card)}
+                    className="flex items-center justify-center gap-1 py-2 rounded-lg border border-neutral-700 hover:border-neutral-500 hover:bg-neutral-800 text-neutral-300 font-semibold text-xs transition-colors"
+                    title="Edit Card Campaign"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Edit</span>
                   </button>
                 </div>
               </div>
