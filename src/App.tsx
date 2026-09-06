@@ -6,6 +6,7 @@ import { CreateCardWizard } from './components/CreateCardWizard';
 import { QRCodeModal } from './components/QRCodeModal';
 import { RSVPModal } from './components/RSVPModal';
 import { EditCardModal } from './components/EditCardModal';
+import { PrintSheetModal } from './components/PrintSheetModal';
 import { WebARViewer } from './components/ar/WebARViewer';
 import { StorageService } from './utils/storage';
 import type { ARCard } from './types';
@@ -16,6 +17,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'cards' | 'new'>('cards');
   const [selectedQRCard, setSelectedQRCard] = useState<ARCard | null>(null);
   const [editingCard, setEditingCard] = useState<ARCard | null>(null);
+  const [printingCard, setPrintingCard] = useState<ARCard | null>(null);
   const [activeARCard, setActiveARCard] = useState<ARCard | null>(null);
   const [isRSVPModalOpen, setIsRSVPModalOpen] = useState(false);
 
@@ -91,6 +93,7 @@ export default function App() {
                   theme={theme}
                   onSelectCard={setSelectedQRCard}
                   onEditCard={setEditingCard}
+                  onPrintSheet={setPrintingCard}
                   onPreviewAR={(id) => {
                     const target = cards.find((c) => c.id === id);
                     if (target) setActiveARCard(target);
@@ -147,6 +150,15 @@ export default function App() {
               isOpen={Boolean(editingCard)}
               onClose={() => setEditingCard(null)}
               onUpdated={refreshCards}
+              theme={theme}
+            />
+          )}
+
+          {printingCard && (
+            <PrintSheetModal
+              card={printingCard}
+              isOpen={Boolean(printingCard)}
+              onClose={() => setPrintingCard(null)}
               theme={theme}
             />
           )}

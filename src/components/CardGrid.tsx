@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { QrCode, Eye, Calendar, Sparkles, Mail, MapPin, Edit3 } from 'lucide-react';
+import { QrCode, Eye, Calendar, Sparkles, Mail, MapPin, Edit3, Printer } from 'lucide-react';
 import type { ARCard, CardType } from '../types';
 
 interface CardGridProps {
@@ -8,6 +8,7 @@ interface CardGridProps {
   onSelectCard: (card: ARCard) => void;
   onPreviewAR: (cardId: string) => void;
   onEditCard: (card: ARCard) => void;
+  onPrintSheet: (card: ARCard) => void;
 }
 
 export const CardGrid: React.FC<CardGridProps> = ({
@@ -16,6 +17,7 @@ export const CardGrid: React.FC<CardGridProps> = ({
   onSelectCard,
   onPreviewAR,
   onEditCard,
+  onPrintSheet,
 }) => {
   const [filter, setFilter] = useState<'all' | CardType>('all');
   const isDark = theme === 'dark';
@@ -170,7 +172,7 @@ export const CardGrid: React.FC<CardGridProps> = ({
                   )}
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 pt-1">
+                <div className="grid grid-cols-4 gap-1.5 pt-1">
                   <button
                     onClick={() => onPreviewAR(card.id)}
                     className="flex items-center justify-center gap-1 py-2 rounded-lg bg-[#D4AF37] hover:bg-[#E5C158] text-neutral-950 font-semibold text-xs transition-colors shadow-sm"
@@ -196,6 +198,15 @@ export const CardGrid: React.FC<CardGridProps> = ({
                   >
                     <Edit3 className="w-3.5 h-3.5 text-neutral-400" />
                     <span>Edit</span>
+                  </button>
+
+                  <button
+                    onClick={() => onPrintSheet(card)}
+                    className="flex items-center justify-center gap-1 py-2 rounded-lg border border-emerald-500/40 hover:bg-emerald-500/10 text-emerald-400 font-semibold text-xs transition-colors"
+                    title="Print Sheet Generator (Bleed & Crop Marks)"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print</span>
                   </button>
                 </div>
               </div>
