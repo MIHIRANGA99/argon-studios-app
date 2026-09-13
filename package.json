@@ -1,7 +1,8 @@
 {
   "name": "argon-studios",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Commercial Luxury WebAR Greeting & Stationery Platform with MindAR Optical Tracking",
   "type": "module",
   "scripts": {
     "dev": "vite",
