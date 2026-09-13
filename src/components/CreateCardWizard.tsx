@@ -55,6 +55,13 @@ export const CreateCardWizard: React.FC<CreateCardWizardProps> = ({
 
     let newCard: ARCard;
 
+    const defaultMind =
+      cardType === 'wedding'
+        ? '/targets/wedding.mind'
+        : cardType === 'business'
+        ? '/targets/business.mind'
+        : '/targets/birthday.mind';
+
     if (cardType === 'wedding') {
       newCard = {
         id,
@@ -72,6 +79,7 @@ export const CreateCardWizard: React.FC<CreateCardWizardProps> = ({
         scansCount: 0,
         createdAt: new Date().toISOString(),
         targetImageUrl,
+        targetMindUrl: defaultMind,
         videoUrl,
         effect,
       };
@@ -91,6 +99,7 @@ export const CreateCardWizard: React.FC<CreateCardWizardProps> = ({
         scansCount: 0,
         createdAt: new Date().toISOString(),
         targetImageUrl,
+        targetMindUrl: defaultMind,
         videoUrl,
         effect,
       };
@@ -112,6 +121,7 @@ export const CreateCardWizard: React.FC<CreateCardWizardProps> = ({
         scansCount: 0,
         createdAt: new Date().toISOString(),
         targetImageUrl,
+        targetMindUrl: defaultMind,
         videoUrl,
         effect,
       };

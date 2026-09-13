@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
+// @ts-ignore
+import { MindARThree } from 'mind-ar/dist/mindar-image-three.prod.js';
 import {
   ArrowLeft,
   Volume2,
@@ -8,9 +10,10 @@ import {
   Send,
   Contact2,
   Camera,
-  RefreshCw,
   Sparkles,
-  CheckCircle2
+  CheckCircle2,
+  Maximize2,
+  Scan
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import type { ARCard } from '../../types';
@@ -23,14 +26,13 @@ interface WebARViewerProps {
 }
 
 export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
-  // Mode & Camera states
+  // Mode & Tracking states
   const [viewMode, setViewMode] = useState<'camera' | 'studio'>('camera');
-  const [cameraActive, setCameraActive] = useState(false);
-  const [cameraFacing, setCameraFacing] = useState<'environment' | 'user'>('environment');
+  const [trackingMode, setTrackingMode] = useState<'optical' | 'spatial'>('optical');
+  const [isTargetLocked, setIsTargetLocked] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
-  // Tracking & Audio states
-  const [isTargetLocked, setIsTargetLocked] = useState(false);
+  // Audio & Interaction states
   const [isMuted, setIsMuted] = useState(true);
   const [hasInteracted, setHasInteracted] = useState(false);
 
@@ -44,19 +46,23 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
 
   // DOM Refs
   const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const cameraVideoRef = useRef<HTMLVideoElement>(null);
+  const fallbackCanvasRef = useRef<HTMLCanvasElement>(null);
   const augmentedVideoRef = useRef<HTMLVideoElement>(null);
 
-  // Three.js instances ref
-  const threeRef = useRef<{
+  // MindAR & Three.js instances ref
+  const mindarRef = useRef<any>(null);
+  const studioThreeRef = useRef<{
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
     renderer: THREE.WebGLRenderer;
     cardGroup: THREE.Group;
-    particles: THREE.Points | null;
     animationFrameId: number;
   } | null>(null);
+
+  // Card meshes reference for mode transitions
+  const cardGroupRef = useRef<THREE.Group | null>(null);
+  const anchorGroupRef = useRef<THREE.Group | null>(null);
+  const activeSceneRef = useRef<THREE.Scene | null>(null);
 
   // Rotation target for gyro/touch
   const targetRotation = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -68,115 +74,18 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
     StorageService.recordScan(card.id);
   }, [card.id]);
 
-  // 1. Initialize Camera Stream (getUserMedia)
-  const startCamera = useCallback(async () => {
-    setCameraError(null);
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setCameraError('Camera API is not supported in this browser. Switching to Studio Preview.');
-      setViewMode('studio');
-      return;
-    }
+  // Determine effective target .mind file URL
+  const targetMindSrc = card.targetMindUrl || (
+    card.type === 'wedding'
+      ? '/targets/wedding.mind'
+      : card.type === 'business'
+      ? '/targets/business.mind'
+      : '/targets/birthday.mind'
+  );
 
-    try {
-      // Stop any existing tracks
-      if (cameraVideoRef.current && cameraVideoRef.current.srcObject) {
-        const stream = cameraVideoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach((t) => t.stop());
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: cameraFacing,
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        },
-        audio: false
-      });
-
-      if (cameraVideoRef.current) {
-        cameraVideoRef.current.srcObject = stream;
-        cameraVideoRef.current.play();
-        setCameraActive(true);
-      }
-    } catch (err: any) {
-      console.warn('Camera access denied or failed:', err);
-      setCameraError(
-        err.name === 'NotAllowedError'
-          ? 'Camera permission was denied. Tap "Studio Preview" to explore without camera.'
-          : 'Unable to start camera stream. Falling back to Studio Preview.'
-      );
-      setViewMode('studio');
-    }
-  }, [cameraFacing]);
-
-  useEffect(() => {
-    if (viewMode === 'camera') {
-      startCamera();
-    } else {
-      if (cameraVideoRef.current && cameraVideoRef.current.srcObject) {
-        const stream = cameraVideoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach((t) => t.stop());
-        cameraVideoRef.current.srcObject = null;
-      }
-      setCameraActive(false);
-    }
-
-    return () => {
-      if (cameraVideoRef.current && cameraVideoRef.current.srcObject) {
-        const stream = cameraVideoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach((t) => t.stop());
-      }
-    };
-  }, [viewMode, startCamera]);
-
-  // Flip camera (environment <-> user)
-  const toggleCameraFacing = () => {
-    setCameraFacing((prev) => (prev === 'environment' ? 'user' : 'environment'));
-  };
-
-  // 2. Initialize Three.js 3D Spatial Stage
-  useEffect(() => {
-    if (!containerRef.current || !canvasRef.current) return;
-
-    const width = containerRef.current.clientWidth || window.innerWidth;
-    const height = containerRef.current.clientHeight || window.innerHeight;
-
-    // Scene
-    const scene = new THREE.Scene();
-
-    // Camera
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-    camera.position.set(0, 0, 5);
-
-    // Renderer (Alpha true for transparent overlay over live camera)
-    const renderer = new THREE.WebGLRenderer({
-      canvas: canvasRef.current,
-      alpha: true,
-      antialias: true,
-      powerPreference: 'high-performance'
-    });
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
-    scene.add(ambientLight);
-
-    const goldDirectionalLight = new THREE.DirectionalLight(0xd4af37, 2.0);
-    goldDirectionalLight.position.set(3, 5, 4);
-    scene.add(goldDirectionalLight);
-
-    const softFillLight = new THREE.PointLight(0xffffff, 0.8, 10);
-    softFillLight.position.set(-3, -2, 3);
-    scene.add(softFillLight);
-
-    // Card 3D Group
-    const cardGroup = new THREE.Group();
-    scene.add(cardGroup);
-
-    // Card Dimensions: Standard 3:4 portrait aspect ratio
-    const cardWidth = 2.2;
-    const cardHeight = 3.0;
+  // Helper: Build the 3D card group (Video Plane + Champagne Gold Metallic Frame + Glow)
+  const createCardMeshGroup = (width: number, height: number) => {
+    const group = new THREE.Group();
 
     // 1) Augmented Video Texture Plane
     let videoTexture: THREE.VideoTexture | null = null;
@@ -199,22 +108,22 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
         });
 
     const cardPlane = new THREE.Mesh(
-      new THREE.PlaneGeometry(cardWidth, cardHeight),
+      new THREE.PlaneGeometry(width, height),
       planeMaterial
     );
-    cardGroup.add(cardPlane);
+    group.add(cardPlane);
 
     // 2) Champagne Gold Chamfered Metallic Frame
-    const frameGeometry = new THREE.PlaneGeometry(cardWidth + 0.12, cardHeight + 0.12);
+    const frameGeometry = new THREE.PlaneGeometry(width + 0.08, height + 0.08);
     const frameMaterial = new THREE.MeshStandardMaterial({
       color: 0xd4af37,
-      metalness: 0.85,
-      roughness: 0.18,
+      metalness: 0.88,
+      roughness: 0.15,
       side: THREE.DoubleSide
     });
     const frameMesh = new THREE.Mesh(frameGeometry, frameMaterial);
-    frameMesh.position.z = -0.01;
-    cardGroup.add(frameMesh);
+    frameMesh.position.z = -0.005;
+    group.add(frameMesh);
 
     // 3) Outer Thin Gold Glowing Border Line
     const edges = new THREE.EdgesGeometry(frameGeometry);
@@ -223,15 +132,18 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
       linewidth: 2
     });
     const borderLines = new THREE.LineSegments(edges, lineMaterial);
-    borderLines.position.z = 0.01;
-    cardGroup.add(borderLines);
+    borderLines.position.z = 0.005;
+    group.add(borderLines);
 
-    // 4) 3D Particles in World Space
-    let particlesMesh: THREE.Points | null = null;
-    const particleCount = 120;
-    const particleGeometry = new THREE.BufferGeometry();
-    const particlePositions = new Float32Array(particleCount * 3);
-    const particleColors = new Float32Array(particleCount * 3);
+    return group;
+  };
+
+  // Helper: Create 3D Particle System
+  const createParticlesMesh = () => {
+    const particleCount = 100;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
 
     const isRose = card.effect === 'rose_petals';
     const primaryColor = isRose ? new THREE.Color(0xe11d48) : new THREE.Color(0xd4af37);
@@ -239,120 +151,257 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
 
     for (let i = 0; i < particleCount; i++) {
       const i3 = i * 3;
-      particlePositions[i3] = (Math.random() - 0.5) * 6;
-      particlePositions[i3 + 1] = (Math.random() - 0.5) * 6;
-      particlePositions[i3 + 2] = (Math.random() - 0.5) * 3;
+      positions[i3] = (Math.random() - 0.5) * 4;
+      positions[i3 + 1] = (Math.random() - 0.5) * 4;
+      positions[i3 + 2] = (Math.random() - 0.5) * 2;
 
       const c = Math.random() > 0.5 ? primaryColor : secondaryColor;
-      particleColors[i3] = c.r;
-      particleColors[i3 + 1] = c.g;
-      particleColors[i3 + 2] = c.b;
+      colors[i3] = c.r;
+      colors[i3 + 1] = c.g;
+      colors[i3 + 2] = c.b;
     }
 
-    particleGeometry.setAttribute(
-      'position',
-      new THREE.BufferAttribute(particlePositions, 3)
-    );
-    particleGeometry.setAttribute(
-      'color',
-      new THREE.BufferAttribute(particleColors, 3)
-    );
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-    const particleMaterial = new THREE.PointsMaterial({
-      size: 0.05,
+    const material = new THREE.PointsMaterial({
+      size: 0.04,
       vertexColors: true,
       transparent: true,
-      opacity: 0.75,
+      opacity: 0.8,
       blending: THREE.AdditiveBlending
     });
 
-    particlesMesh = new THREE.Points(particleGeometry, particleMaterial);
+    return new THREE.Points(geometry, material);
+  };
+
+  // 1. Initialize MindAR Optical Image Tracking Engine
+  const startMindAR = useCallback(async () => {
+    if (!containerRef.current) return;
+    setCameraError(null);
+
+    try {
+      // Clean up previous instance if any
+      if (mindarRef.current) {
+        mindarRef.current.stop();
+        mindarRef.current = null;
+      }
+
+      const mindarThree = new MindARThree({
+        container: containerRef.current,
+        imageTargetSrc: targetMindSrc,
+        filterMinCF: 0.0001,
+        filterBeta: 0.001,
+        uiLoading: 'no',
+        uiScanning: 'no',
+        uiError: 'no'
+      });
+
+      mindarRef.current = mindarThree;
+      const { renderer, scene, camera } = mindarThree;
+      activeSceneRef.current = scene;
+
+      // Add lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
+      scene.add(ambientLight);
+      const goldDirLight = new THREE.DirectionalLight(0xd4af37, 2.5);
+      goldDirLight.position.set(3, 5, 4);
+      scene.add(goldDirLight);
+
+      // In MindAR, normalized image target width is 1.0; height is 4/3 (~1.333) for standard 3:4 portrait
+      const cardWidth = 1.0;
+      const cardHeight = 1.333;
+      const cardGroup = createCardMeshGroup(cardWidth, cardHeight);
+      cardGroupRef.current = cardGroup;
+
+      const particlesMesh = createParticlesMesh();
+      cardGroup.add(particlesMesh);
+
+      // Add Anchor 0
+      const anchor = mindarThree.addAnchor(0);
+      anchorGroupRef.current = anchor.group;
+      anchor.group.add(cardGroup);
+
+      // Optical Target Event Listeners
+      anchor.onTargetFound = () => {
+        setIsTargetLocked(true);
+        if (augmentedVideoRef.current) {
+          augmentedVideoRef.current.play().catch(() => {});
+        }
+        triggerConfetti(card.effect);
+      };
+
+      anchor.onTargetLost = () => {
+        setIsTargetLocked(false);
+      };
+
+      await mindarThree.start();
+
+      // Render Loop
+      let clock = new THREE.Clock();
+      renderer.setAnimationLoop(() => {
+        const elapsedTime = clock.getElapsedTime();
+
+        // If in Detached Spatial Mode, smoothly apply gyro / touch orientation
+        if (trackingMode === 'spatial' && cardGroup) {
+          cardGroup.rotation.x += (targetRotation.current.x - cardGroup.rotation.x) * 0.1;
+          cardGroup.rotation.y += (targetRotation.current.y - cardGroup.rotation.y) * 0.1;
+          cardGroup.position.y = Math.sin(elapsedTime * 1.5) * 0.04;
+        }
+
+        if (particlesMesh) {
+          particlesMesh.rotation.y = elapsedTime * 0.1;
+        }
+
+        renderer.render(scene, camera);
+      });
+    } catch (err: any) {
+      console.warn('MindAR Optical Tracking initialization failed:', err);
+      setCameraError('Optical camera tracking unavailable. Switching to Studio 3D stage.');
+      setViewMode('studio');
+    }
+  }, [card, targetMindSrc, trackingMode]);
+
+  // 2. Initialize Fallback Studio Mode (Three.js only, no camera required)
+  const startStudioStage = useCallback(() => {
+    if (!fallbackCanvasRef.current || !containerRef.current) return;
+
+    const width = containerRef.current.clientWidth || window.innerWidth;
+    const height = containerRef.current.clientHeight || window.innerHeight;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
+    camera.position.set(0, 0, 4.5);
+
+    const renderer = new THREE.WebGLRenderer({
+      canvas: fallbackCanvasRef.current,
+      alpha: true,
+      antialias: true,
+      powerPreference: 'high-performance'
+    });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+    scene.add(ambientLight);
+    const goldDirLight = new THREE.DirectionalLight(0xd4af37, 2.5);
+    goldDirLight.position.set(3, 5, 4);
+    scene.add(goldDirLight);
+
+    const cardGroup = createCardMeshGroup(2.0, 2.67);
+    scene.add(cardGroup);
+
+    const particlesMesh = createParticlesMesh();
     scene.add(particlesMesh);
 
-    // Set Ref
-    threeRef.current = {
+    setIsTargetLocked(true);
+    if (augmentedVideoRef.current) {
+      augmentedVideoRef.current.play().catch(() => {});
+    }
+
+    let clock = new THREE.Clock();
+    const animate = () => {
+      const elapsedTime = clock.getElapsedTime();
+      cardGroup.rotation.x += (targetRotation.current.x - cardGroup.rotation.x) * 0.1;
+      cardGroup.rotation.y += (targetRotation.current.y - cardGroup.rotation.y) * 0.1;
+      cardGroup.position.y = Math.sin(elapsedTime * 1.5) * 0.05;
+
+      if (particlesMesh) {
+        particlesMesh.rotation.y = elapsedTime * 0.08;
+      }
+
+      renderer.render(scene, camera);
+      studioThreeRef.current!.animationFrameId = requestAnimationFrame(animate);
+    };
+
+    studioThreeRef.current = {
       scene,
       camera,
       renderer,
       cardGroup,
-      particles: particlesMesh,
-      animationFrameId: 0
+      animationFrameId: requestAnimationFrame(animate)
     };
+  }, [card]);
 
-    // Auto Target Lock sequence (simulating spatial acquisition)
-    const lockTimer = setTimeout(() => {
-      setIsTargetLocked(true);
-      triggerConfetti(card.effect);
-    }, 1500);
-
-    // Animation Loop
-    let clock = new THREE.Clock();
-    const animate = () => {
-      const elapsedTime = clock.getElapsedTime();
-
-      // Smoothly interpolate card rotation toward target (gyro / pointer drag)
-      cardGroup.rotation.x += (targetRotation.current.x - cardGroup.rotation.x) * 0.1;
-      cardGroup.rotation.y += (targetRotation.current.y - cardGroup.rotation.y) * 0.1;
-
-      // Gentle floating breathing oscillation
-      cardGroup.position.y = Math.sin(elapsedTime * 1.5) * 0.08;
-
-      // Rotate and drift particles
-      if (particlesMesh) {
-        particlesMesh.rotation.y = elapsedTime * 0.08;
-        particlesMesh.rotation.x = Math.sin(elapsedTime * 0.05) * 0.1;
+  // Master viewMode effect (Camera MindAR vs Studio)
+  useEffect(() => {
+    if (viewMode === 'camera') {
+      if (studioThreeRef.current) {
+        cancelAnimationFrame(studioThreeRef.current.animationFrameId);
+        studioThreeRef.current.renderer.dispose();
+        studioThreeRef.current = null;
       }
-
-      renderer.render(scene, camera);
-      threeRef.current!.animationFrameId = requestAnimationFrame(animate);
-    };
-
-    animate();
-
-    // Resize Handler
-    const handleResize = () => {
-      if (!containerRef.current || !threeRef.current) return;
-      const w = containerRef.current.clientWidth;
-      const h = containerRef.current.clientHeight;
-      threeRef.current.camera.aspect = w / h;
-      threeRef.current.camera.updateProjectionMatrix();
-      threeRef.current.renderer.setSize(w, h);
-    };
-
-    window.addEventListener('resize', handleResize);
+      startMindAR();
+    } else {
+      if (mindarRef.current) {
+        mindarRef.current.stop();
+        mindarRef.current = null;
+      }
+      startStudioStage();
+    }
 
     return () => {
-      clearTimeout(lockTimer);
-      window.removeEventListener('resize', handleResize);
-      if (threeRef.current) {
-        cancelAnimationFrame(threeRef.current.animationFrameId);
-        renderer.dispose();
+      if (mindarRef.current) {
+        mindarRef.current.stop();
+        mindarRef.current = null;
+      }
+      if (studioThreeRef.current) {
+        cancelAnimationFrame(studioThreeRef.current.animationFrameId);
+        studioThreeRef.current.renderer.dispose();
+        studioThreeRef.current = null;
       }
     };
-  }, [card, viewMode]);
+  }, [viewMode, startMindAR, startStudioStage]);
 
-  // 3. Device Orientation Listener (Mobile Gyroscope)
+  // 3. Handle Detaching / Locking Mode Switch ("Pop Out to 3D" vs "Anchor to Paper")
+  const handleToggleTrackingMode = () => {
+    const nextMode = trackingMode === 'optical' ? 'spatial' : 'optical';
+    setTrackingMode(nextMode);
+
+    if (!cardGroupRef.current || !anchorGroupRef.current || !activeSceneRef.current) return;
+
+    if (nextMode === 'spatial') {
+      // Detach from MindAR physical anchor and attach to scene in front of camera
+      anchorGroupRef.current.remove(cardGroupRef.current);
+      activeSceneRef.current.add(cardGroupRef.current);
+      cardGroupRef.current.position.set(0, 0, -2.5);
+      cardGroupRef.current.rotation.set(0, 0, 0);
+      cardGroupRef.current.scale.set(1.4, 1.4, 1.4);
+      setIsTargetLocked(true);
+    } else {
+      // Re-attach to physical MindAR anchor
+      activeSceneRef.current.remove(cardGroupRef.current);
+      anchorGroupRef.current.add(cardGroupRef.current);
+      cardGroupRef.current.position.set(0, 0, 0);
+      cardGroupRef.current.rotation.set(0, 0, 0);
+      cardGroupRef.current.scale.set(1, 1, 1);
+      targetRotation.current = { x: 0, y: 0 };
+    }
+  };
+
+  // 4. Mobile Gyroscope Listener
   useEffect(() => {
     const handleOrientation = (e: DeviceOrientationEvent) => {
-      if (e.gamma !== null && e.beta !== null) {
-        // Map beta (forward/back tilt -90 to 90) and gamma (left/right tilt -90 to 90)
-        const radX = ((e.beta - 45) * Math.PI) / 180;
-        const radY = (e.gamma * Math.PI) / 180;
-
-        // Clamp angle limits for natural card viewing
-        targetRotation.current.x = THREE.MathUtils.clamp(radX * 0.5, -0.4, 0.4);
-        targetRotation.current.y = THREE.MathUtils.clamp(radY * 0.5, -0.5, 0.5);
+      if (trackingMode === 'spatial' || viewMode === 'studio') {
+        if (e.gamma !== null && e.beta !== null) {
+          const radX = ((e.beta - 45) * Math.PI) / 180;
+          const radY = (e.gamma * Math.PI) / 180;
+          targetRotation.current.x = THREE.MathUtils.clamp(radX * 0.4, -0.4, 0.4);
+          targetRotation.current.y = THREE.MathUtils.clamp(radY * 0.4, -0.5, 0.5);
+        }
       }
     };
 
     window.addEventListener('deviceorientation', handleOrientation);
     return () => window.removeEventListener('deviceorientation', handleOrientation);
-  }, []);
+  }, [trackingMode, viewMode]);
 
-  // 4. Pointer Drag (Manual Tilt for Desktop or Touch)
+  // 5. Pointer Drag for Touch or Desktop
   const handlePointerDown = (e: React.PointerEvent) => {
-    isDragging.current = true;
-    previousPointer.current = { x: e.clientX, y: e.clientY };
+    if (trackingMode === 'spatial' || viewMode === 'studio') {
+      isDragging.current = true;
+      previousPointer.current = { x: e.clientX, y: e.clientY };
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
@@ -360,10 +409,9 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
     const deltaX = e.clientX - previousPointer.current.x;
     const deltaY = e.clientY - previousPointer.current.y;
 
-    targetRotation.current.y += deltaX * 0.005;
-    targetRotation.current.x += deltaY * 0.005;
+    targetRotation.current.y += deltaX * 0.006;
+    targetRotation.current.x += deltaY * 0.006;
 
-    // Clamp
     targetRotation.current.x = THREE.MathUtils.clamp(targetRotation.current.x, -0.5, 0.5);
     targetRotation.current.y = THREE.MathUtils.clamp(targetRotation.current.y, -0.6, 0.6);
 
@@ -374,7 +422,7 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
     isDragging.current = false;
   };
 
-  // 5. Confetti helper
+  // Confetti helper
   const triggerConfetti = (effect: string) => {
     if (effect === 'rose_petals') {
       confetti({
@@ -388,33 +436,33 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
         particleCount: 55,
         spread: 80,
         origin: { y: 0.55 },
-        colors: ['#D4AF37', '#FDE047', '#E5C158', '#FFFFFF']
+        colors: ['#D4AF37', '#F3E5AB', '#FFFFFF', '#AA771C']
       });
     }
   };
 
-  // 6. Audio Unmute Gesture (Mobile Browser Autoplay Unlock)
+  // Audio gesture unlock (Mobile Safari / Chrome autoplay requirement)
   const handleUnlockAudio = () => {
     setHasInteracted(true);
     setIsMuted(false);
     if (augmentedVideoRef.current) {
       augmentedVideoRef.current.muted = false;
-      augmentedVideoRef.current.play().catch(console.warn);
+      augmentedVideoRef.current.play().catch(() => {});
     }
   };
 
-  // 7. RSVP Submit
+  // Handle RSVP Submit
   const handleRSVPSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!guestName.trim()) return;
 
     await StorageService.recordRSVP({
-      id: `rsvp-${Date.now()}`,
+      id: 'rsvp-' + Date.now(),
       cardId: card.id,
-      guestName,
+      guestName: guestName.trim(),
       attending,
       plusOne,
-      dietary,
+      dietary: dietary.trim(),
       submittedAt: new Date().toISOString()
     });
 
@@ -423,10 +471,10 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
     setTimeout(() => {
       setIsRSVPOpen(false);
       setRsvpSubmitted(false);
-    }, 2000);
+    }, 2400);
   };
 
-  // 8. Contact Download
+  // Handle vCard Download
   const handleDownloadContact = () => {
     if (card.type === 'business') {
       downloadVCard(card);
@@ -441,83 +489,72 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      className="fixed inset-0 z-50 bg-black text-white flex flex-col justify-between overflow-hidden select-none touch-none"
+      className="relative w-full h-screen overflow-hidden bg-black select-none touch-none"
     >
-      {/* Hidden Augmented Video (Provides Texture to Three.js Plane) */}
+      {/* Hidden Augmented Video Texture Feed */}
       {card.videoUrl && (
         <video
           ref={augmentedVideoRef}
           src={card.videoUrl}
-          autoPlay
+          playsInline
           loop
           muted={isMuted}
-          playsInline
           crossOrigin="anonymous"
           className="hidden"
         />
       )}
 
-      {/* Layer 1: Hardware Camera Stream or Studio Backdrop */}
-      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        {viewMode === 'camera' ? (
-          <video
-            ref={cameraVideoRef}
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="relative w-full h-full">
-            <img
-              src={card.targetImageUrl}
-              alt="Studio Backdrop"
-              className="w-full h-full object-cover filter blur-[8px] scale-110 opacity-40"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-black/80" />
-          </div>
-        )}
-      </div>
+      {/* Fallback Canvas for Studio Mode */}
+      {viewMode === 'studio' && (
+        <div className="absolute inset-0 bg-radial from-neutral-900 via-[#0A0A0C] to-black">
+          <canvas ref={fallbackCanvasRef} className="w-full h-full block" />
+        </div>
+      )}
 
-      {/* Layer 2: Transparent Three.js WebGL Spatial Canvas */}
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 z-10 w-full h-full pointer-events-auto cursor-grab active:cursor-grabbing"
-      />
+      {/* Optical Viewfinder HUD (Visible in Optical Camera Mode) */}
+      {viewMode === 'camera' && (
+        <div className="absolute inset-0 pointer-events-none z-20 flex flex-col items-center justify-center p-6">
+          <div
+            className={`relative w-64 h-80 sm:w-72 sm:h-96 rounded-2xl border-2 transition-all duration-300 ${
+              isTargetLocked
+                ? 'border-emerald-400/80 shadow-[0_0_40px_rgba(52,211,153,0.3)]'
+                : 'border-[#D4AF37]/50 shadow-[0_0_30px_rgba(212,175,55,0.15)] animate-pulse'
+            }`}
+          >
+            {/* Corner Alignment Brackets */}
+            <span className="absolute -top-2 -left-2 w-5 h-5 border-t-3 border-l-3 border-[#D4AF37]"></span>
+            <span className="absolute -top-2 -right-2 w-5 h-5 border-t-3 border-r-3 border-[#D4AF37]"></span>
+            <span className="absolute -bottom-2 -left-2 w-5 h-5 border-b-3 border-l-3 border-[#D4AF37]"></span>
+            <span className="absolute -bottom-2 -right-2 w-5 h-5 border-b-3 border-r-3 border-[#D4AF37]"></span>
 
-      {/* Layer 3: Holographic Spatial Reticle & Target HUD */}
-      <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center">
-        <div
-          className={`relative w-[75vw] max-w-[300px] aspect-[3/4] border border-dashed transition-all duration-700 ${
-            isTargetLocked
-              ? 'border-[#D4AF37]/80 gold-glow'
-              : 'border-white/30 animate-pulse'
-          }`}
-        >
-          {/* Corner Brackets */}
-          <span className="absolute -top-1.5 -left-1.5 w-4 h-4 border-t-2 border-l-2 border-[#D4AF37]"></span>
-          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 border-t-2 border-r-2 border-[#D4AF37]"></span>
-          <span className="absolute -bottom-1.5 -left-1.5 w-4 h-4 border-b-2 border-l-2 border-[#D4AF37]"></span>
-          <span className="absolute -bottom-1.5 -right-1.5 w-4 h-4 border-b-2 border-r-2 border-[#D4AF37]"></span>
+            {/* Target Status Tag */}
+            <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-3.5 py-1 rounded-full bg-black/80 backdrop-blur-md border border-[#D4AF37]/60 text-[10px] font-bold tracking-widest text-[#D4AF37] flex items-center gap-1.5 shadow-xl whitespace-nowrap">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isTargetLocked ? 'bg-emerald-400' : 'bg-amber-400 animate-ping'
+                }`}
+              ></span>
+              <span>
+                {trackingMode === 'spatial'
+                  ? '3D DETACHED MODE • GYROSCOPE'
+                  : isTargetLocked
+                  ? 'OPTICAL TARGET LOCKED'
+                  : 'AIM AT PRINTED CARD ARTWORK'}
+              </span>
+            </div>
 
-          {/* Target Status Tag */}
-          <div className="absolute top-2.5 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/70 backdrop-blur-md border border-[#D4AF37]/50 text-[10px] font-bold tracking-widest text-[#D4AF37] flex items-center gap-1.5 shadow-lg">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                isTargetLocked ? 'bg-emerald-400' : 'bg-amber-400 animate-ping'
-              }`}
-            ></span>
-            <span>{isTargetLocked ? 'SPATIAL TARGET LOCKED' : 'ALIGN CARD IN FRAME'}</span>
-          </div>
-
-          {/* Interactive Hint */}
-          <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap text-[11px] text-neutral-300 font-medium bg-black/60 px-3 py-0.5 rounded-full border border-white/10 backdrop-blur-sm">
-            Drag to tilt card in 3D • Gyroscope active
+            {/* Hint */}
+            <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap text-[11px] text-neutral-300 font-medium bg-black/70 px-3.5 py-1 rounded-full border border-white/10 backdrop-blur-sm">
+              {trackingMode === 'spatial'
+                ? 'Drag or tilt phone to rotate card in 3D'
+                : 'Point camera at printed photo to bring it to life'}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Layer 4: Floating Top Navigation HUD */}
-      <header className="relative z-30 p-4 sm:p-6 flex items-center justify-between bg-gradient-to-b from-black/90 via-black/50 to-transparent backdrop-blur-[2px]">
+      {/* Floating Top Navigation HUD */}
+      <header className="relative z-30 p-4 sm:p-6 flex items-center justify-between bg-gradient-to-b from-black/95 via-black/60 to-transparent backdrop-blur-[2px]">
         <button
           onClick={onClose}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 border border-white/20 text-xs font-semibold text-neutral-200 hover:text-white hover:border-[#D4AF37] transition-all"
@@ -529,7 +566,7 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
         <div className="text-center">
           <span className="text-[10px] tracking-[0.25em] uppercase font-bold text-[#D4AF37] flex items-center justify-center gap-1">
             <Sparkles className="w-3 h-3" />
-            <span>ARGON WebAR Studio</span>
+            <span>ARGON Spatial Studio</span>
           </span>
           <h2 className="font-serif-luxury text-base font-bold text-white tracking-wide truncate max-w-[200px]">
             {card.title}
@@ -537,11 +574,36 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Hybrid Mode: "Pop Out to 3D" / "Anchor to Print" */}
+          {viewMode === 'camera' && (
+            <button
+              onClick={handleToggleTrackingMode}
+              title={trackingMode === 'optical' ? 'Pop out card into 3D' : 'Re-lock card to paper print'}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                trackingMode === 'spatial'
+                  ? 'bg-[#D4AF37] text-neutral-950 border-[#D4AF37] shadow-lg gold-glow'
+                  : 'bg-black/60 border-white/20 text-neutral-200 hover:border-[#D4AF37]'
+              }`}
+            >
+              {trackingMode === 'optical' ? (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Pop Out</span>
+                </>
+              ) : (
+                <>
+                  <Scan className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Anchor to Card</span>
+                </>
+              )}
+            </button>
+          )}
+
           {/* View Mode Toggle (Camera vs Studio) */}
           <button
             onClick={() => setViewMode(viewMode === 'camera' ? 'studio' : 'camera')}
-            title={viewMode === 'camera' ? 'Switch to Studio Backdrop' : 'Switch to Live Camera'}
-            className={`p-2.5 rounded-full border backdrop-blur-md transition-all ${
+            title={viewMode === 'camera' ? 'Switch to Studio Mode' : 'Switch to Live Camera'}
+            className={`p-2 rounded-full border backdrop-blur-md transition-all ${
               viewMode === 'camera'
                 ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300'
                 : 'bg-black/60 border-white/20 text-neutral-300'
@@ -549,17 +611,6 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
           >
             <Camera className="w-4 h-4" />
           </button>
-
-          {/* Camera Flip Button (Only in camera mode) */}
-          {viewMode === 'camera' && cameraActive && (
-            <button
-              onClick={toggleCameraFacing}
-              title="Flip Camera (Front/Back)"
-              className="p-2.5 rounded-full bg-black/60 border border-white/20 text-neutral-300 hover:text-white hover:border-[#D4AF37] transition-all"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
-          )}
 
           {/* Sound Toggle */}
           <button
@@ -570,7 +621,7 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
                 augmentedVideoRef.current.muted = nextMuted;
               }
             }}
-            className="p-2.5 rounded-full bg-black/60 border border-white/20 text-neutral-300 hover:text-white transition-all"
+            className="p-2 rounded-full bg-black/60 border border-white/20 text-neutral-300 hover:text-white transition-all"
           >
             {isMuted ? (
               <VolumeX className="w-4 h-4" />
@@ -599,8 +650,8 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
         </div>
       )}
 
-      {/* Layer 5: Floating Bottom Action Controls */}
-      <footer className="relative z-30 p-4 sm:p-6 pb-8 bg-gradient-to-t from-black/95 via-black/60 to-transparent flex flex-col items-center gap-3 pointer-events-auto">
+      {/* Floating Bottom Action Controls */}
+      <footer className="absolute bottom-0 left-0 right-0 z-30 p-4 sm:p-6 pb-8 bg-gradient-to-t from-black/95 via-black/60 to-transparent flex flex-col items-center gap-3 pointer-events-auto">
         <div className="w-full max-w-sm flex items-center justify-center gap-2.5">
           {/* Venue Directions */}
           {(card.type === 'wedding' || card.type === 'birthday') && card.venueMapUrl && (
@@ -618,7 +669,13 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
           {/* Wedding / Birthday: In-AR RSVP Button */}
           {card.type !== 'business' && (
             <button
-              onClick={() => setIsRSVPOpen(true)}
+              onClick={() => {
+                // If in optical mode, automatically pop out to 3D so typing RSVP is comfortable
+                if (trackingMode === 'optical') {
+                  handleToggleTrackingMode();
+                }
+                setIsRSVPOpen(true);
+              }}
               className="flex-[1.4] flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#E5C158] to-[#D4AF37] text-neutral-950 text-xs font-bold tracking-wide shadow-lg gold-glow hover:scale-[1.02] active:scale-[0.98] transition-all"
             >
               <Send className="w-4 h-4 fill-neutral-950" />
@@ -647,7 +704,7 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
               Celebration RSVP
             </h3>
             <p className="text-xs text-neutral-400 text-center mb-5">
-              Confirm your attendance for {card.title}
+              Confirm attendance for {card.title}
             </p>
 
             {rsvpSubmitted ? (

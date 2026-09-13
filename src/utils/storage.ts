@@ -22,6 +22,7 @@ export const INITIAL_CARDS: ARCard[] = [
     scansCount: 342,
     createdAt: '2026-08-15T10:00:00Z',
     targetImageUrl: 'https://images.unsplash.com/photo-1519741497674-611481863552?w=800',
+    targetMindUrl: '/targets/wedding.mind',
     videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
     effect: 'rose_petals'
   },
@@ -42,6 +43,7 @@ export const INITIAL_CARDS: ARCard[] = [
     scansCount: 620,
     createdAt: '2026-08-20T14:30:00Z',
     targetImageUrl: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=800',
+    targetMindUrl: '/targets/business.mind',
     videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
     effect: 'golden_sparkles'
   },
@@ -58,9 +60,10 @@ export const INITIAL_CARDS: ARCard[] = [
     rsvpEnabled: true,
     rsvpsCount: 34,
     scansCount: 120,
-    createdAt: '2026-08-28T09:15:00Z',
+    createdAt: '2026-08-22T09:15:00Z',
     targetImageUrl: 'https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=800',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
+    targetMindUrl: '/targets/birthday.mind',
+    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
     effect: 'stardust'
   }
 ];
@@ -73,6 +76,7 @@ function mapDbToCard(row: any): ARCard {
     title: row.title,
     createdAt: row.created_at || new Date().toISOString(),
     targetImageUrl: row.target_image_url,
+    targetMindUrl: row.target_mind_url || custom.targetMindUrl || undefined,
     videoUrl: row.video_url || undefined,
     audioUrl: row.audio_url || undefined,
     effect: row.effect,
@@ -83,7 +87,7 @@ function mapDbToCard(row: any): ARCard {
 }
 
 function mapCardToDb(card: ARCard) {
-  const { id, type, title, createdAt, targetImageUrl, videoUrl, audioUrl, effect, scansCount, ...customData } = card as any;
+  const { id, type, title, createdAt, targetImageUrl, targetMindUrl, videoUrl, audioUrl, effect, scansCount, ...customData } = card as any;
   return {
     id,
     title,
@@ -94,7 +98,10 @@ function mapCardToDb(card: ARCard) {
     effect: effect || 'golden_sparkles',
     scans_count: scansCount || 0,
     created_at: createdAt || new Date().toISOString(),
-    custom_data: customData
+    custom_data: {
+      ...customData,
+      targetMindUrl
+    }
   };
 }
 

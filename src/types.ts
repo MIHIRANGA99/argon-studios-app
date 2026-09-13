@@ -2,12 +2,15 @@ export type CardType = 'wedding' | 'birthday' | 'business' | 'custom';
 
 export type ParticleEffect = 'rose_petals' | 'golden_sparkles' | 'floating_hearts' | 'stardust' | 'none';
 
+export type ARTrackingMode = 'optical' | 'spatial' | 'studio';
+
 export interface BaseCard {
   id: string;
   type: CardType;
   title: string;
   createdAt: string;
   targetImageUrl: string;
+  targetMindUrl?: string;
   videoUrl?: string;
   audioUrl?: string;
   effect: ParticleEffect;
