@@ -21,7 +21,7 @@ export async function loadMindCompiler(): Promise<any> {
   }
 
   try {
-    const mod = await import('mind-ar/dist/mindar-image.prod.js');
+    const mod = await import('../vendor/mindar/mindar-image.prod.js');
     if (mod.Compiler) return mod.Compiler;
   } catch (err) {
     console.warn('Direct MindAR compiler import failed, loading from CDN fallback...', err);

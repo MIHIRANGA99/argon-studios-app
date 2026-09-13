@@ -13,6 +13,11 @@ export default defineConfig({
       },
     ],
   },
+  build: {
+    rollupOptions: {
+      external: ['node-fetch'],
+    },
+  },
   server: {
     host: true,
     allowedHosts: true,

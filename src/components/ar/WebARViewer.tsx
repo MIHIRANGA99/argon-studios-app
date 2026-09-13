@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 // @ts-ignore
-import { MindARThree } from 'mind-ar/dist/mindar-image-three.prod.js';
+import { MindARThree } from '../../vendor/mindar/mindar-image-three.prod.js';
 import {
   ArrowLeft,
   Volume2,
