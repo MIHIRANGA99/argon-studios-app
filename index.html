@@ -15,11 +15,26 @@
     <script>
       window.addEventListener('error', function(e) {
         console.error('GLOBAL ERROR:', e);
-        var box = document.getElementById('error-box') || document.createElement('div');
-        box.id = 'error-box';
-        box.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:20px;background:#991B1B;color:#FEE2E2;z-index:999999;font-family:monospace;font-size:12px;white-space:pre-wrap;border-bottom:2px solid #EF4444;';
-        box.innerText = 'App Load Error: ' + (e.error ? (e.error.stack || e.error.message) : e.message) + '\\nFile: ' + e.filename + ':' + e.lineno;
-        document.body.appendChild(box);
+        if (e.message && (e.message.indexOf('ResizeObserver') !== -1 || e.message.indexOf('Script error') !== -1)) return;
+        var box = document.getElementById('error-box');
+        if (!box) {
+          box = document.createElement('div');
+          box.id = 'error-box';
+          box.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:14px 20px;background:#991B1B;color:#FEE2E2;z-index:999999;font-family:monospace;font-size:12px;white-space:pre-wrap;border-bottom:2px solid #EF4444;display:flex;justify-content:space-between;align-items:flex-start;';
+          var textSpan = document.createElement('span');
+          textSpan.id = 'error-box-text';
+          var closeBtn = document.createElement('button');
+          closeBtn.innerText = '✕';
+          closeBtn.style.cssText = 'background:none;border:none;color:#FFF;font-size:16px;font-weight:bold;cursor:pointer;padding:0 0 0 12px;';
+          closeBtn.onclick = function() { box.remove(); };
+          box.appendChild(textSpan);
+          box.appendChild(closeBtn);
+          document.body.appendChild(box);
+        }
+        var textElem = document.getElementById('error-box-text');
+        if (textElem) {
+          textElem.innerText = 'Notice: ' + (e.error ? (e.error.stack || e.error.message) : e.message);
+        }
       });
     </script>
   </head>

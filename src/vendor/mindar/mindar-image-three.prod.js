@@ -13580,15 +13580,28 @@ class Zb {
     userDeviceId: c = null,
     environmentDeviceId: d = null
   }) {
-    this.container = e, this.imageTargetSrc = t, this.maxTrack = a, this.filterMinCF = o, this.filterBeta = l, this.warmupTolerance = p, this.missTolerance = m, this.ui = new Rd({ uiLoading: r, uiScanning: n, uiError: u }), this.userDeviceId = c, this.environmentDeviceId = d, this.shouldFaceUser = !1, this.scene = new Ct(), this.cssScene = new Ct(), this.renderer = new Ti({ antialias: !0, alpha: !0 }), this.cssRenderer = new Vd({ antialias: !0 }), this.renderer.outputEncoding = Si, this.renderer.setPixelRatio(window.devicePixelRatio), this.camera = new vi(), this.anchors = [], this.renderer.domElement.style.position = "absolute", this.renderer.domElement.style.zIndex = "1", this.renderer.domElement.style.pointerEvents = "none", this.cssRenderer.domElement.style.position = "absolute", this.cssRenderer.domElement.style.zIndex = "1", this.container.appendChild(this.renderer.domElement), this.container.appendChild(this.cssRenderer.domElement), window.addEventListener("resize", this.resize.bind(this));
+    this.container = e, this.imageTargetSrc = t, this.maxTrack = a, this.filterMinCF = o, this.filterBeta = l, this.warmupTolerance = p, this.missTolerance = m, this.ui = new Rd({ uiLoading: r, uiScanning: n, uiError: u }), this.userDeviceId = c, this.environmentDeviceId = d, this.shouldFaceUser = !1, this.scene = new Ct(), this.cssScene = new Ct(), this.renderer = new Ti({ antialias: !0, alpha: !0 }), this.cssRenderer = new Vd({ antialias: !0 }), this.renderer.outputEncoding = Si, this.renderer.setPixelRatio(window.devicePixelRatio), this.camera = new vi(), this.anchors = [], this.renderer.domElement.style.position = "absolute", this.renderer.domElement.style.zIndex = "1", this.renderer.domElement.style.pointerEvents = "none", this.cssRenderer.domElement.style.position = "absolute", this.cssRenderer.domElement.style.zIndex = "1", this.container.appendChild(this.renderer.domElement), this.container.appendChild(this.cssRenderer.domElement), this._resizeHandler = this.resize.bind(this), window.addEventListener("resize", this._resizeHandler);
   }
   async start() {
     this.ui.showLoading(), await this._startVideo(), await this._startAR();
   }
   stop() {
-    this.controller.stopProcessVideo(), this.video.srcObject.getTracks().forEach(function(t) {
-      t.stop();
-    }), this.video.remove();
+    if (this._resizeHandler) {
+      window.removeEventListener("resize", this._resizeHandler);
+    }
+    if (this.controller) {
+      try { this.controller.stopProcessVideo(); } catch (e) {}
+    }
+    if (this.video && this.video.srcObject) {
+      try {
+        this.video.srcObject.getTracks().forEach(function(t) {
+          t.stop();
+        });
+      } catch (e) {}
+    }
+    if (this.video) {
+      try { this.video.remove(); } catch (e) {}
+    }
   }
   switchCamera() {
     this.shouldFaceUser = !this.shouldFaceUser, this.stop(), this.start();
@@ -13666,13 +13679,16 @@ class Zb {
   }
   resize() {
     const { renderer: e, cssRenderer: t, camera: a, container: r, video: n } = this;
-    if (!n)
+    if (!n || !this.controller || typeof this.controller.getProjectionMatrix !== "function" || !n.videoWidth || !n.videoHeight)
       return;
     this.video.setAttribute("width", this.video.videoWidth), this.video.setAttribute("height", this.video.videoHeight);
     let u, o;
     const l = n.videoWidth / n.videoHeight, p = r.clientWidth / r.clientHeight;
     l > p ? (o = r.clientHeight, u = o * l) : (u = r.clientWidth, o = u / l);
-    const m = this.controller.getProjectionMatrix(), c = this.controller.inputWidth / this.controller.inputHeight;
+    const m = this.controller.getProjectionMatrix();
+    if (!m)
+      return;
+    const c = this.controller.inputWidth / this.controller.inputHeight;
     let d;
     c > p ? d = this.video.width / this.controller.inputWidth : d = this.video.height / this.controller.inputHeight;
     let h, N;

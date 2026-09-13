@@ -261,6 +261,11 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
         mindarThree.renderer.domElement.style.pointerEvents = 'none';
       }
 
+      // Explicitly trigger a clean resize to ensure projection matrices align with final mobile viewport
+      try {
+        mindarThree.resize();
+      } catch (_) {}
+
       // Render Loop
       let clock = new THREE.Clock();
       renderer.setAnimationLoop(() => {
