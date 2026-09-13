@@ -237,6 +237,30 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
 
       await mindarThree.start();
 
+      // Ensure video element is in front of background and actively playing on mobile
+      if (mindarThree.video) {
+        mindarThree.video.style.position = 'absolute';
+        mindarThree.video.style.top = '0px';
+        mindarThree.video.style.left = '0px';
+        mindarThree.video.style.width = '100%';
+        mindarThree.video.style.height = '100%';
+        mindarThree.video.style.objectFit = 'cover';
+        mindarThree.video.style.zIndex = '0';
+        mindarThree.video.setAttribute('playsinline', '');
+        mindarThree.video.setAttribute('webkit-playsinline', '');
+        mindarThree.video.play().catch(() => {});
+      }
+
+      if (mindarThree.renderer?.domElement) {
+        mindarThree.renderer.domElement.style.position = 'absolute';
+        mindarThree.renderer.domElement.style.top = '0px';
+        mindarThree.renderer.domElement.style.left = '0px';
+        mindarThree.renderer.domElement.style.width = '100%';
+        mindarThree.renderer.domElement.style.height = '100%';
+        mindarThree.renderer.domElement.style.zIndex = '1';
+        mindarThree.renderer.domElement.style.pointerEvents = 'none';
+      }
+
       // Render Loop
       let clock = new THREE.Clock();
       renderer.setAnimationLoop(() => {
@@ -352,6 +376,20 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
       }
     };
   }, [viewMode, startMindAR, startStudioStage]);
+
+  // Set transparent page background in camera mode so video feed is not blocked by HTML/body backgrounds
+  useEffect(() => {
+    if (viewMode === 'camera') {
+      const originalBodyBg = document.body.style.backgroundColor;
+      const originalDocBg = document.documentElement.style.backgroundColor;
+      document.body.style.backgroundColor = 'transparent';
+      document.documentElement.style.backgroundColor = 'transparent';
+      return () => {
+        document.body.style.backgroundColor = originalBodyBg;
+        document.documentElement.style.backgroundColor = originalDocBg;
+      };
+    }
+  }, [viewMode]);
 
   // 3. Handle Detaching / Locking Mode Switch ("Pop Out to 3D" vs "Anchor to Paper")
   const handleToggleTrackingMode = () => {
@@ -489,7 +527,9 @@ export const WebARViewer: React.FC<WebARViewerProps> = ({ card, onClose }) => {
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      className="relative w-full h-screen overflow-hidden bg-black select-none touch-none"
+      className={`fixed inset-0 overflow-hidden select-none touch-none z-50 ${
+        viewMode === 'camera' ? 'bg-transparent' : 'bg-black'
+      }`}
     >
       {/* Hidden Augmented Video Texture Feed */}
       {card.videoUrl && (

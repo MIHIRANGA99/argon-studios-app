@@ -13580,7 +13580,7 @@ class Zb {
     userDeviceId: c = null,
     environmentDeviceId: d = null
   }) {
-    this.container = e, this.imageTargetSrc = t, this.maxTrack = a, this.filterMinCF = o, this.filterBeta = l, this.warmupTolerance = p, this.missTolerance = m, this.ui = new Rd({ uiLoading: r, uiScanning: n, uiError: u }), this.userDeviceId = c, this.environmentDeviceId = d, this.shouldFaceUser = !1, this.scene = new Ct(), this.cssScene = new Ct(), this.renderer = new Ti({ antialias: !0, alpha: !0 }), this.cssRenderer = new Vd({ antialias: !0 }), this.renderer.outputEncoding = Si, this.renderer.setPixelRatio(window.devicePixelRatio), this.camera = new vi(), this.anchors = [], this.renderer.domElement.style.position = "absolute", this.cssRenderer.domElement.style.position = "absolute", this.container.appendChild(this.renderer.domElement), this.container.appendChild(this.cssRenderer.domElement), window.addEventListener("resize", this.resize.bind(this));
+    this.container = e, this.imageTargetSrc = t, this.maxTrack = a, this.filterMinCF = o, this.filterBeta = l, this.warmupTolerance = p, this.missTolerance = m, this.ui = new Rd({ uiLoading: r, uiScanning: n, uiError: u }), this.userDeviceId = c, this.environmentDeviceId = d, this.shouldFaceUser = !1, this.scene = new Ct(), this.cssScene = new Ct(), this.renderer = new Ti({ antialias: !0, alpha: !0 }), this.cssRenderer = new Vd({ antialias: !0 }), this.renderer.outputEncoding = Si, this.renderer.setPixelRatio(window.devicePixelRatio), this.camera = new vi(), this.anchors = [], this.renderer.domElement.style.position = "absolute", this.renderer.domElement.style.zIndex = "1", this.renderer.domElement.style.pointerEvents = "none", this.cssRenderer.domElement.style.position = "absolute", this.cssRenderer.domElement.style.zIndex = "1", this.container.appendChild(this.renderer.domElement), this.container.appendChild(this.cssRenderer.domElement), window.addEventListener("resize", this.resize.bind(this));
   }
   async start() {
     this.ui.showLoading(), await this._startVideo(), await this._startAR();
@@ -13607,7 +13607,7 @@ class Zb {
   }
   _startVideo() {
     return new Promise((e, t) => {
-      if (this.video = document.createElement("video"), this.video.setAttribute("autoplay", ""), this.video.setAttribute("muted", ""), this.video.setAttribute("playsinline", ""), this.video.style.position = "absolute", this.video.style.top = "0px", this.video.style.left = "0px", this.video.style.zIndex = "-2", this.container.appendChild(this.video), !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      if (this.video = document.createElement("video"), this.video.setAttribute("autoplay", ""), this.video.setAttribute("muted", ""), this.video.setAttribute("playsinline", ""), this.video.style.position = "absolute", this.video.style.top = "0px", this.video.style.left = "0px", this.video.setAttribute("webkit-playsinline", ""), this.video.style.zIndex = "0", this.container.appendChild(this.video), !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         this.ui.showCompatibility(), t();
         return;
       }
@@ -13617,8 +13617,8 @@ class Zb {
       };
       this.shouldFaceUser ? this.userDeviceId ? a.video.deviceId = { exact: this.userDeviceId } : a.video.facingMode = "user" : this.environmentDeviceId ? a.video.deviceId = { exact: this.environmentDeviceId } : a.video.facingMode = "environment", navigator.mediaDevices.getUserMedia(a).then((r) => {
         this.video.addEventListener("loadedmetadata", () => {
-          this.video.setAttribute("width", this.video.videoWidth), this.video.setAttribute("height", this.video.videoHeight), e();
-        }), this.video.srcObject = r;
+          this.video.setAttribute("width", this.video.videoWidth), this.video.setAttribute("height", this.video.videoHeight), this.video.play().catch(function(){}), e();
+        }), this.video.srcObject = r; this.video.play().catch(function(){});
       }).catch((r) => {
         console.log("getUserMedia error", r), t();
       });
@@ -13679,9 +13679,9 @@ class Zb {
     c > p ? (h = r.clientHeight, h *= d) : (N = r.clientWidth, h = N / this.controller.inputWidth * this.controller.inputHeight, h *= d);
     let g = r.clientHeight / h;
     const f = 2 * Math.atan(1 / m[5] * g) * 180 / Math.PI, b = m[14] / (m[10] - 1), O = m[14] / (m[10] + 1);
-    m[5] / m[0], a.fov = f, a.near = b, a.far = O, a.aspect = r.clientWidth / r.clientHeight, a.updateProjectionMatrix(), n.style.top = -(o - r.clientHeight) / 2 + "px", n.style.left = -(u - r.clientWidth) / 2 + "px", n.style.width = u + "px", n.style.height = o + "px";
+    m[5] / m[0], a.fov = f, a.near = b, a.far = O, a.aspect = r.clientWidth / r.clientHeight, a.updateProjectionMatrix(), n.style.top = -(o - r.clientHeight) / 2 + "px", n.style.left = -(u - r.clientWidth) / 2 + "px", n.style.width = u + "px", n.style.height = o + "px", n.style.zIndex = "0";
     const _ = e.domElement, T = t.domElement;
-    _.style.position = "absolute", _.style.left = 0, _.style.top = 0, _.style.width = r.clientWidth + "px", _.style.height = r.clientHeight + "px", T.style.position = "absolute", T.style.left = 0, T.style.top = 0, T.style.width = r.clientWidth + "px", T.style.height = r.clientHeight + "px", e.setSize(r.clientWidth, r.clientHeight), t.setSize(r.clientWidth, r.clientHeight);
+    _.style.position = "absolute", _.style.zIndex = "1", _.style.pointerEvents = "none", _.style.left = 0, _.style.top = 0, _.style.width = r.clientWidth + "px", _.style.height = r.clientHeight + "px", T.style.position = "absolute", T.style.left = 0, T.style.top = 0, T.style.width = r.clientWidth + "px", T.style.height = r.clientHeight + "px", e.setSize(r.clientWidth, r.clientHeight), t.setSize(r.clientWidth, r.clientHeight);
   }
 }
 window.MINDAR || (window.MINDAR = {});
